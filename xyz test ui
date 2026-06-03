@@ -1,0 +1,215 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera = workspace.CurrentCamera
+
+-- 1. Create Main UI Container
+local screenGui = Instance.new("ScreenGui", playerGui)
+screenGui.Name = "TeleportGui"
+screenGui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 240, 0, 420)
+frame.Position = UDim2.new(0.5, -120, 0.5, -210)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35) -- Dark Grey Base
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+-- 2. Styling Helper Function (Purple buttons, Black text, Rounded corners)
+local function styleElement(el)
+    el.BackgroundColor3 = Color3.fromRGB(150, 60, 210) -- Fancy Purple
+    if el:IsA("TextButton") or el:IsA("TextBox") then
+        el.TextColor3 = Color3.new(0, 0, 0) -- Black Text
+        el.Font = Enum.Font.GothamBold
+        el.TextSize = 14
+    end
+    Instance.new("UICorner", el).CornerRadius = UDim.new(0, 8)
+end
+
+-- 3. Drag Handle (Top Bar)
+local dragHandle = Instance.new("Frame", frame)
+dragHandle.Size = UDim2.new(1, 0, 0, 35)
+dragHandle.BackgroundColor3 = Color3.fromRGB(70, 20, 100) -- Darker Purple
+Instance.new("UICorner", dragHandle).CornerRadius = UDim.new(0, 12)
+
+local closeBtn = Instance.new("TextButton", dragHandle)
+closeBtn.Text = "X"
+closeBtn.Size = UDim2.new(0, 35, 1, 0)
+closeBtn.Position = UDim2.new(1, -35, 0, 0)
+closeBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50) -- Red X
+closeBtn.TextColor3 = Color3.new(0,0,0)
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 12)
+closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+
+-- Open/Close Menu Button
+local openBtn = Instance.new("TextButton", screenGui)
+openBtn.Text = "MENU"
+openBtn.Size = UDim2.new(0, 70, 0, 45)
+openBtn.Position = UDim2.new(0, 10, 0, 50)
+styleElement(openBtn)
+openBtn.MouseButton1Click:Connect(function() frame.Visible = not frame.Visible end)
+
+-- 4. Player List (Fixed and Styled)
+local scrollList = Instance.new("ScrollingFrame", frame)
+scrollList.Size = UDim2.new(1, -20, 0.35, 0)
+scrollList.Position = UDim2.new(0, 10, 0, 45)
+scrollList.BackgroundTransparency = 1
+scrollList.ScrollBarThickness = 4
+local listLayout = Instance.new("UIListLayout", scrollList)
+listLayout.Padding = UDim.new(0, 5)
+
+local function updateList()
+    -- Clear old buttons
+    for _, child in pairs(scrollList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    -- Add current players
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player then
+            local btn = Instance.new("TextButton", scrollList)
+            btn.Text = " " .. p.DisplayName
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.Size = UDim2.new(1, -5, 0, 30)
+            styleElement(btn)
+            btn.MouseButton1Click:Connect(function()
+                if p.Character and p.Character:FindFirstChild("HumanoidRootPart") and player.Character then
+                    player.Character.HumanoidRootPart.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+                end
+            end)
+        end
+    end
+end
+Players.PlayerAdded:Connect(updateList)
+Players.PlayerRemoving:Connect(updateList)
+updateList() -- Call immediately to populate list
+
+-- 5. Textboxes and Toggles
+local wsInput = Instance.new("TextBox", frame)
+wsInput.PlaceholderText = "WS (16)"
+wsInput.Size = UDim2.new(0.45, 0, 0, 30)
+wsInput.Position = UDim2.new(0, 10, 0.5, 0)
+styleElement(wsInput)
+
+local wsToggle = Instance.new("TextButton", frame)
+wsToggle.Text = "WS OFF"
+wsToggle.Size = UDim2.new(0.45, 0, 0, 30)
+wsToggle.Position = UDim2.new(0.5, 2, 0.5, 0)
+styleElement(wsToggle)
+
+local jpInput = Instance.new("TextBox", frame)
+jpInput.PlaceholderText = "JP (50)"
+jpInput.Size = UDim2.new(0.45, 0, 0, 30)
+jpInput.Position = UDim2.new(0, 10, 0.6, 0)
+styleElement(jpInput)
+
+local jpToggle = Instance.new("TextButton", frame)
+jpToggle.Text = "JP OFF"
+jpToggle.Size = UDim2.new(0.45, 0, 0, 30)
+jpToggle.Position = UDim2.new(0.5, 2, 0.6, 0)
+styleElement(jpToggle)
+
+local flyToggle = Instance.new("TextButton", frame)
+flyToggle.Text = "FLY OFF"
+flyToggle.Size = UDim2.new(1, -20, 0, 35)
+flyToggle.Position = UDim2.new(0, 10, 0.7, 0)
+styleElement(flyToggle)
+
+local resetBtn = Instance.new("TextButton", frame)
+resetBtn.Text = "RESET CHARACTER"
+resetBtn.Size = UDim2.new(1, -20, 0, 35)
+resetBtn.Position = UDim2.new(0, 10, 0.8, 0)
+styleElement(resetBtn)
+
+-- 6. Button Logic
+local wsEnabled, jpEnabled, flyEnabled = false, false, false
+local bodyVelocity, bodyGyro
+
+wsToggle.MouseButton1Click:Connect(function() 
+    wsEnabled = not wsEnabled 
+    wsToggle.Text = wsEnabled and "WS ON" or "WS OFF" 
+    if not wsEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.WalkSpeed = 16 end
+end)
+
+jpToggle.MouseButton1Click:Connect(function() 
+    jpEnabled = not jpEnabled 
+    jpToggle.Text = jpEnabled and "JP ON" or "JP OFF" 
+    if not jpEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.JumpPower = 50 end
+end)
+
+flyToggle.MouseButton1Click:Connect(function()
+    flyEnabled = not flyEnabled
+    flyToggle.Text = flyEnabled and "FLY ON" or "FLY OFF"
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if flyEnabled and root then
+        bodyVelocity = Instance.new("BodyVelocity", root)
+        bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyGyro = Instance.new("BodyGyro", root)
+        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    else
+        if bodyVelocity then bodyVelocity:Destroy() end
+        if bodyGyro then bodyGyro:Destroy() end
+        if char and char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = false end
+    end
+end)
+
+resetBtn.MouseButton1Click:Connect(function() 
+    if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.Health = 0 end 
+end)
+
+-- 7. Main Loop (Fly Math & Stats)
+RunService.Heartbeat:Connect(function()
+    local char = player.Character
+    local hum = char and char:FindFirstChild("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if hum and root then
+        -- Apply WS / JP
+        if wsEnabled then hum.WalkSpeed = tonumber(wsInput.Text) or 16 end
+        if jpEnabled then hum.JumpPower = tonumber(jpInput.Text) or 50 end
+        
+        -- Fly Logic
+        if flyEnabled and bodyVelocity and bodyGyro then
+            hum.PlatformStand = true -- Stops normal walking physics from interrupting flight
+            local speed = hum.WalkSpeed * 2 -- Fly a bit faster than walking
+            local moveDir = hum.MoveDirection
+            
+            -- Calculate if player is pushing joystick forward/backward to apply camera pitch
+            local camXZ = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+            local yVelocity = 0
+            if camXZ.Magnitude > 0 then
+                camXZ = camXZ.Unit
+                local forwardAlignment = moveDir:Dot(camXZ) -- 1 if forward, -1 if backward
+                yVelocity = camera.CFrame.LookVector.Y * forwardAlignment * speed
+            end
+            
+            bodyVelocity.Velocity = Vector3.new(moveDir.X * speed, yVelocity, moveDir.Z * speed)
+            bodyGyro.CFrame = camera.CFrame
+        end
+    end
+end)
+
+-- 8. Dragging Logic (Fixed)
+local dragging, dragStart, startPos
+dragHandle.InputBegan:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+    end 
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
